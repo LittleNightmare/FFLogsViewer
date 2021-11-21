@@ -1,3 +1,8 @@
+# Update:
+
+Add support to Chinese DC.
+
+
 # FFLogsViewer
 
 Small plugin to view FF Logs ranking percentiles in-game.
