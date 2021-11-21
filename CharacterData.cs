@@ -50,7 +50,7 @@ namespace FFLogsViewer
         internal CharacterData(string firstName, string lastName, string worldName)
         {
             this.FirstName = firstName;
-            this.LastName = lastName;
+            this.LastName = Utils4CN.Init.IsCN() ? "" : lastName;
             this.WorldName = worldName;
         }
 
@@ -70,7 +70,7 @@ namespace FFLogsViewer
         internal bool IsCharacterReady()
         {
             return this.FirstName != ""
-                   && this.LastName != ""
+                   && (Utils4CN.Init.IsCN() || this.LastName != "")
                    && this.WorldName != "";
         }
 

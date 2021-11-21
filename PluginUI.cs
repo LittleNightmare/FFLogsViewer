@@ -216,18 +216,20 @@ namespace FFLogsViewer
         {
             if (!this.Visible) return;
 
+            var isCN = Utils4CN.Init.IsCN();
+
             ImGui.SetNextWindowSize(new Vector2(WindowWidth, ReducedWindowHeight), ImGuiCond.FirstUseEver);
             if (ImGui.Begin("FF Logs Viewer", ref this._visible,
                 ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoScrollWithMouse))
             {
                 ImGui.Columns(4, "InputColumns", true);
 
-                var buttonsWidth = (ImGui.CalcTextSize("Target") + ImGui.CalcTextSize("Clipboard")).X + 40.0f;
-                var colWidth = (ImGui.GetWindowWidth() - buttonsWidth) / 3.0f;
+                var buttonsWidth = (ImGui.CalcTextSize("Target") + ImGui.CalcTextSize("Clipboard")).X + 47.0f;
+                var colWidth = (ImGui.GetWindowWidth() - buttonsWidth) / (isCN ? 2.0f : 3.0f);
                 var sizeMin = Math.Max(ImGui.CalcTextSize(this._selectedCharacterData.FirstName).X,
                     Math.Max(ImGui.CalcTextSize(this._selectedCharacterData.LastName).X,
                         ImGui.CalcTextSize(this._selectedCharacterData.WorldName).X));
-                var idealWindowWidth = sizeMin * 3 + buttonsWidth + 73.0f;
+                var idealWindowWidth = sizeMin * (isCN ? 2 : 3) + buttonsWidth + 73.0f;
                 if (idealWindowWidth < WindowWidth) idealWindowWidth = WindowWidth;
                 float idealWindowHeight;
                 if (this._selectedCharacterData.IsEveryLogsReady && !this._hasLoadingFailed)
@@ -238,23 +240,29 @@ namespace FFLogsViewer
 
                 ImGui.SetColumnWidth(0, colWidth);
                 ImGui.SetColumnWidth(1, colWidth);
-                ImGui.SetColumnWidth(2, colWidth);
-                ImGui.SetColumnWidth(3, buttonsWidth);
+                if (isCN) {
+                    ImGui.SetColumnWidth(2, buttonsWidth);
+                } else {
+                    ImGui.SetColumnWidth(2, colWidth);
+                    ImGui.SetColumnWidth(3, buttonsWidth);
+                }
 
                 ImGui.PushItemWidth(colWidth - 15);
                 this._characterInput[0] = this._selectedCharacterData.FirstName;
-                ImGui.InputTextWithHint("##FirstName", "First Name", ref this._characterInput[0], 256,
+                ImGui.InputTextWithHint("##FirstName", isCN ? "Character Name" : "First Name", ref this._characterInput[0], 256,
                     ImGuiInputTextFlags.CharsNoBlank);
                 this._selectedCharacterData.FirstName = this._characterInput[0];
                 ImGui.PopItemWidth();
 
-                ImGui.NextColumn();
-                ImGui.PushItemWidth(colWidth - 15);
-                this._characterInput[1] = this._selectedCharacterData.LastName;
-                ImGui.InputTextWithHint("##LastName", "Last Name", ref this._characterInput[1], 256,
-                    ImGuiInputTextFlags.CharsNoBlank);
-                this._selectedCharacterData.LastName = this._characterInput[1];
-                ImGui.PopItemWidth();
+                if (!isCN) {
+                    ImGui.NextColumn();
+                    ImGui.PushItemWidth(colWidth - 15);
+                    this._characterInput[1] = this._selectedCharacterData.LastName;
+                    ImGui.InputTextWithHint("##LastName", "Last Name", ref this._characterInput[1], 256,
+                        ImGuiInputTextFlags.CharsNoBlank);
+                    this._selectedCharacterData.LastName = this._characterInput[1];
+                    ImGui.PopItemWidth();
+                }
 
                 ImGui.NextColumn();
                 ImGui.PushItemWidth(colWidth - 14);

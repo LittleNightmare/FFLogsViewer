@@ -78,7 +78,7 @@ namespace FFLogsViewer
             if (world == null)
                 return;
 
-            var playerName = $"{args.Text}@{world.Name}";
+            var playerName = $"{args.Text.ToString().TrimEnd()}@{world.Name}";
 
             if (this.Plugin.Configuration.OpenInBrowser)
                 this.Plugin.OpenPlayerInBrowser(playerName);

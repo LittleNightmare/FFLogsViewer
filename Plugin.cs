@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using System.Windows;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.Command;
@@ -40,6 +39,13 @@ namespace FFLogsViewer
             "Adamantoise", "Cactuar", "Faerie", "Gilgamesh", "Jenova", "Midgardsormr", "Sargatanas", "Siren",
             "Behemoth", "Excalibur", "Exodus", "Famfrit", "Hyperion", "Lamia", "Leviathan", "Ultros",
             "Balmung", "Brynhildr", "Coeurl", "Diabolos", "Goblin", "Malboro", "Mateus", "Zalera",
+        };
+
+        private readonly string[] _cn =
+        {
+            "晨曦王座", "沃仙曦染", "宇宙和音", "红玉海", "萌芽池", "神意之地", "幻影群岛", "拉诺西亚",
+            "拂晓之间", "龙巢神殿", "旅人栈桥", "白金幻象", "梦羽宝境", "神拳痕", "潮风亭", "白银乡",
+            "琥珀原", "柔风海湾", "海猫茶屋", "延夏", "静语庄园", "摩杜纳", "紫水栈桥",
         };
 
         internal readonly Configuration Configuration;
@@ -86,6 +92,8 @@ namespace FFLogsViewer
 
             this._pi.UiBuilder.Draw += DrawUi;
             this._pi.UiBuilder.OpenConfigUi += ToggleSettingsUi;
+
+            (new Utils4CN.Init(pluginInterface)).ReplaceDataIfCN();
         }
 
         public void Dispose()
@@ -167,6 +175,7 @@ namespace FFLogsViewer
 
         internal void OpenPlayerInBrowser(string args)
         {
+                PluginLog.Log("OpenPlayerInBrowser");
             try
             {
                 var character = ParseTextForChar(args);
@@ -185,6 +194,16 @@ namespace FFLogsViewer
 
         private static CharacterData GetPlayerData(PlayerCharacter playerCharacter)
         {
+            PluginLog.Log($"[GetPlayerData] {playerCharacter.HomeWorld.GameData.Name} {playerCharacter.Name.TextValue}");
+            if (Utils4CN.Init.IsCN())
+            {
+                return new()
+                {
+                    FirstName = playerCharacter.Name.TextValue,
+                    WorldName = playerCharacter.HomeWorld.GameData.Name,
+                };
+            }
+
             return new()
             {
                 FirstName = playerCharacter.Name.TextValue.Split(' ')[0],
@@ -221,42 +240,55 @@ namespace FFLogsViewer
 
         private CharacterData ParseTextForChar(string rawText)
         {
+            PluginLog.Log($"[ParseTextForChar] {rawText}");
             var character = new CharacterData();
-            rawText = rawText.Replace("'s party for", " ");
 
-            rawText = rawText.Replace("You join", " ");
-            rawText = Regex.Replace(rawText, "\\[.*?\\]", " ");
-            rawText = Regex.Replace(rawText, "[^A-Za-z '-]", " ");
-            rawText = string.Concat(rawText.Select(x => char.IsUpper(x) ? " " + x : x.ToString())).TrimStart(' ');
-            rawText = Regex.Replace(rawText, @"\s+", " ");
-
-            var words = rawText.Split(new[] {" "}, StringSplitOptions.RemoveEmptyEntries);
-
-            var index = -1;
-            for (var i = 0; index == -1 && i < this._na.Length; i++) index = Array.IndexOf(words, this._na[i]);
-            for (var i = 0; index == -1 && i < this._eu.Length; i++) index = Array.IndexOf(words, this._eu[i]);
-            for (var i = 0; index == -1 && i < this._jp.Length; i++) index = Array.IndexOf(words, this._jp[i]);
-
-            if (index - 2 >= 0)
-            {
-                character.FirstName = words[index - 2];
-                character.LastName = words[index - 1];
-                character.WorldName = words[index];
-            }
-            else if (words.Length >= 2)
-            {
+            if (Utils4CN.Init.IsCN()) {
+                var words = rawText.Split("@");
+                if (words.Count() < 1) {
+                    throw new ArgumentException("Invalid text.");
+                }
                 character.FirstName = words[0];
-                character.LastName = words[1];
-                character.WorldName = DalamudApi.ClientState.LocalPlayer?.HomeWorld.GameData.Name;
+                character.WorldName = words.Count() >=2 ? words[1] : "";
             }
-            else
-            {
-                throw new ArgumentException("Invalid text.");
+            else {
+                rawText = rawText.Replace("'s party for", " ");
+
+                rawText = rawText.Replace("You join", " ");
+                rawText = Regex.Replace(rawText, "\\[.*?\\]", " ");
+                rawText = Regex.Replace(rawText, "[^A-Za-z '-]", " ");
+                rawText = string.Concat(rawText.Select(x => char.IsUpper(x) ? " " + x : x.ToString())).TrimStart(' ');
+                rawText = Regex.Replace(rawText, @"\s+", " ");
+
+                var words = rawText.Split(new[] {" "}, StringSplitOptions.RemoveEmptyEntries);
+
+                var index = -1;
+                for (var i = 0; index == -1 && i < this._na.Length; i++) index = Array.IndexOf(words, this._na[i]);
+                for (var i = 0; index == -1 && i < this._eu.Length; i++) index = Array.IndexOf(words, this._eu[i]);
+                for (var i = 0; index == -1 && i < this._jp.Length; i++) index = Array.IndexOf(words, this._jp[i]);
+                for (var i = 0; index == -1 && i < this._cn.Length; i++) index = Array.IndexOf(words, this._cn[i]);
+
+
+                if (index - 2 >= 0)
+                {
+                    character.FirstName = words[index - 2];
+                    character.LastName = words[index - 1];
+                    character.WorldName = words[index];
+                }
+                else if (words.Length >= 2)
+                {
+                    character.FirstName = words[0];
+                    character.LastName = words[1];
+                    character.WorldName = DalamudApi.ClientState.LocalPlayer?.HomeWorld.GameData.Name;
+                }
+                else
+                {
+                    throw new ArgumentException("Invalid text.");
+                }
+
+                if (!char.IsUpper(character.FirstName[0]) || !char.IsUpper(character.LastName[0]))
+                    throw new ArgumentException("Invalid text.");
             }
-
-            if (!char.IsUpper(character.FirstName[0]) || !char.IsUpper(character.LastName[0]))
-                throw new ArgumentException("Invalid text.");
-
             return character;
         }
 
@@ -364,6 +396,8 @@ namespace FFLogsViewer
             if (this._eu.Any(worldName.Contains)) return "EU";
 
             if (this._jp.Any(worldName.Contains)) return "JP";
+
+            if (this._cn.Any(worldName.Contains)) return "CN";
 
             throw new ArgumentException("World not supported.");
         }
