@@ -1,13 +1,18 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.Command;
+using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Logging;
 using Dalamud.Plugin;
+using FFXIVClientStructs.FFXIV.Client.Game.Character;
+using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using ImGuiNET;
 using Lumina.Excel.GeneratedSheets;
 using XivCommon;
@@ -19,27 +24,7 @@ namespace FFLogsViewer
         private const string CommandName = "/fflogs";
         private const string SettingsCommandName = "/fflogsconfig";
 
-        private readonly string[] _eu =
-        {
-            "Cerberus", "Louisoix", "Moogle", "Omega", "Ragnarok", "Spriggan",
-            "Lich", "Odin", "Phoenix", "Shiva", "Zodiark", "Twintania",
-        };
-
-        private readonly string[] _jp =
-        {
-            "Aegis", "Atomos", "Carbuncle", "Garuda", "Gungnir", "Kujata", "Ramuh", "Tonberry", "Typhon", "Unicorn",
-            "Alexander", "Bahamut", "Durandal", "Fenrir", "Ifrit", "Ridill", "Tiamat", "Ultima", "Valefor", "Yojimbo",
-            "Zeromus",
-            "Anima", "Asura", "Belias", "Chocobo", "Hades", "Ixion", "Mandragora", "Masamune", "Pandaemonium",
-            "Shinryu", "Titan",
-        };
-
-        private readonly string[] _na =
-        {
-            "Adamantoise", "Cactuar", "Faerie", "Gilgamesh", "Jenova", "Midgardsormr", "Sargatanas", "Siren",
-            "Behemoth", "Excalibur", "Exodus", "Famfrit", "Hyperion", "Lamia", "Leviathan", "Ultros",
-            "Balmung", "Brynhildr", "Coeurl", "Diabolos", "Goblin", "Malboro", "Mateus", "Zalera",
-        };
+        private readonly string[] _validWorlds;
 
         private readonly string[] _cn =
         {
@@ -80,7 +65,7 @@ namespace FFLogsViewer
 
             this._commandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
             {
-                HelpMessage = "Open the FF Logs Viewer window or parse the arguments for a character.",
+                HelpMessage = "Open the FF Logs Viewer window or parse the arguments for a character, support most placeholders.",
                 ShowInHelp = true,
             });
 
@@ -89,6 +74,15 @@ namespace FFLogsViewer
                 HelpMessage = "Open the FF Logs Viewer config window.",
                 ShowInHelp = true,
             });
+
+            var worlds = DalamudApi.DataManager.GetExcelSheet<World>()?.Where(world => world.IsPublic && world.DataCenter?.Value?.Region != 0);
+
+            if (worlds == null)
+            {
+                throw new InvalidOperationException("Sheets weren't ready.");
+            }
+
+            this._validWorlds = worlds.Select(world => world.Name.RawString).ToArray();
 
             this._pi.UiBuilder.Draw += DrawUi;
             this._pi.UiBuilder.OpenConfigUi += ToggleSettingsUi;
@@ -103,7 +97,6 @@ namespace FFLogsViewer
             this.Ui.Dispose();
             this._commandManager.RemoveHandler(CommandName);
             this._commandManager.RemoveHandler(SettingsCommandName);
-            this._pi.Dispose();
         }
 
         private void OnCommand(string command, string args)
@@ -197,18 +190,18 @@ namespace FFLogsViewer
             PluginLog.Log($"[GetPlayerData] {playerCharacter.HomeWorld.GameData.Name} {playerCharacter.Name.TextValue}");
             if (Utils4CN.Init.IsCN())
             {
-                return new()
+                return new CharacterData
                 {
                     FirstName = playerCharacter.Name.TextValue,
                     WorldName = playerCharacter.HomeWorld.GameData.Name,
                 };
             }
 
-            return new()
+            return new CharacterData
             {
                 FirstName = playerCharacter.Name.TextValue.Split(' ')[0],
                 LastName = playerCharacter.Name.TextValue.Split(' ')[1],
-                WorldName = playerCharacter.HomeWorld.GameData.Name,
+                WorldName = playerCharacter.HomeWorld.GameData?.Name,
             };
         }
 
@@ -221,15 +214,6 @@ namespace FFLogsViewer
             throw new ArgumentException("Not a valid target.");
         }
 
-        private static bool IsWorldValid(string worldAttempt)
-        {
-            var world = DalamudApi.DataManager.GetExcelSheet<World>()
-                ?.FirstOrDefault(
-                    x => x.Name.ToString().Equals(worldAttempt, StringComparison.InvariantCultureIgnoreCase));
-
-            return world != null;
-        }
-
         internal CharacterData GetClipboardCharacter()
         {
             if (ImGui.GetClipboardText() == null) throw new ArgumentException("Invalid clipboard.");
@@ -238,10 +222,54 @@ namespace FFLogsViewer
             return ParseTextForChar(clipboardRawText);
         }
 
+        private static unsafe SeString ReadSeString(byte* ptr) {
+            var offset = 0;
+            while (true) {
+                var b = *(ptr + offset);
+                if (b == 0) {
+                    break;
+                }
+                offset += 1;
+            }
+            var bytes = new byte[offset];
+            Marshal.Copy(new IntPtr(ptr), bytes, 0, offset);
+            return SeString.Parse(bytes);
+        }
+
+        private static unsafe string? FindPlaceholder(string text)
+        {
+            var placeholder = Framework.Instance()->GetUiModule()->GetPronounModule()->ResolvePlaceholder(text, 0, 0);
+            if (placeholder != null && placeholder->IsCharacter())
+            {
+                var character = (Character*)placeholder;
+
+                if (placeholder->Name != null && character->HomeWorld != 0 && character->HomeWorld != 65535)
+                {
+                    var world = DalamudApi.DataManager.GetExcelSheet<World>()
+                        ?.FirstOrDefault(x => x.RowId == character->HomeWorld);
+
+                    if (world != null)
+                    {
+                        var name = $"{ReadSeString(placeholder->Name)}@{world.Name}";
+                        return name;
+                    }
+                }
+            }
+
+            return null;
+        }
+
         private CharacterData ParseTextForChar(string rawText)
         {
             PluginLog.Log($"[ParseTextForChar] {rawText}");
             var character = new CharacterData();
+            var placeholder = FindPlaceholder(rawText);
+            if (placeholder != null)
+            {
+                rawText = placeholder;
+            }
+
+            rawText = rawText.Replace("'s party for", " ");
 
             if (Utils4CN.Init.IsCN()) {
                 var words = rawText.Split("@");
@@ -261,12 +289,8 @@ namespace FFLogsViewer
                 rawText = Regex.Replace(rawText, @"\s+", " ");
 
                 var words = rawText.Split(new[] {" "}, StringSplitOptions.RemoveEmptyEntries);
-
                 var index = -1;
-                for (var i = 0; index == -1 && i < this._na.Length; i++) index = Array.IndexOf(words, this._na[i]);
-                for (var i = 0; index == -1 && i < this._eu.Length; i++) index = Array.IndexOf(words, this._eu[i]);
-                for (var i = 0; index == -1 && i < this._jp.Length; i++) index = Array.IndexOf(words, this._jp[i]);
-                for (var i = 0; index == -1 && i < this._cn.Length; i++) index = Array.IndexOf(words, this._cn[i]);
+                for (var i = 0; index == -1 && i < this._validWorlds.Length; i++) index = Array.IndexOf(words, this._validWorlds[i]);
 
 
                 if (index - 2 >= 0)
@@ -354,12 +378,15 @@ namespace FFLogsViewer
                     }
 
                     ParseLogs(characterData, logData.data.characterData.character.EdenPromise);
-                    ParseLogs(characterData, logData.data.characterData.character.EdenVerse);
+                    //ParseLogs(characterData, logData.data.characterData.character.EdenVerse);
+                    ParseLogs(characterData, logData.data.characterData.character.Asphodelos);
                     ParseLogs(characterData, logData.data.characterData.character.UltimatesShB);
+                    ParseLogs(characterData, logData.data.characterData.character.Ultimates);
                     ParseLogs(characterData, logData.data.characterData.character.UltimatesSB);
-                    ParseLogs(characterData, logData.data.characterData.character.ExtremesII);
-                    ParseLogs(characterData, logData.data.characterData.character.ExtremesIII);
-                    ParseLogs(characterData, logData.data.characterData.character.Unreal);
+                    //ParseLogs(characterData, logData.data.characterData.character.ExtremesII);
+                    //ParseLogs(characterData, logData.data.characterData.character.ExtremesIII);
+                    ParseLogs(characterData, logData.data.characterData.character.ExtremesEW);
+                    //ParseLogs(characterData, logData.data.characterData.character.Unreal);
                 }
                 catch (Exception e)
                 {
@@ -387,19 +414,26 @@ namespace FFLogsViewer
             });
         }
 
-        private string GetRegionName(string worldName)
+        private static string GetRegionName(string worldName)
         {
-            if (!IsWorldValid(worldName)) throw new ArgumentException("Invalid world.");
+            var world = DalamudApi.DataManager.GetExcelSheet<World>()
+                ?.FirstOrDefault(
+                    x => x.Name.ToString().Equals(worldName, StringComparison.InvariantCultureIgnoreCase));
 
-            if (this._na.Any(worldName.Contains)) return "NA";
-
-            if (this._eu.Any(worldName.Contains)) return "EU";
-
-            if (this._jp.Any(worldName.Contains)) return "JP";
+            if (world == null)  throw new ArgumentException("Invalid world.");
 
             if (this._cn.Any(worldName.Contains)) return "CN";
 
             throw new ArgumentException("World not supported.");
+            // TODO 检查CN的数字
+            return world?.DataCenter?.Value?.Region switch
+            {
+                1 => "JP",
+                2 => "NA",
+                3 => "EU",
+                4 => "OC",
+                _ => throw new ArgumentException("World not supported."),
+            };
         }
 
         private static void ParseLogs(CharacterData characterData, dynamic zone)
@@ -417,9 +451,9 @@ namespace FFLogsViewer
                 string job;
                 if (fight.spec == null)
                 {
-                    best = 0;
-                    median = 0;
-                    kills = 0;
+                    best = -1;
+                    median = -1;
+                    kills = -1;
                     job = "-";
                 }
                 else

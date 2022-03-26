@@ -2,9 +2,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>FFLogsViewer</PackageId>
-    <Version>1.4.0.1</Version>
+    <Version>1.5.6.2</Version>
     <Authors>Aireil</Authors>
     <Company>-</Company>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -83,7 +85,8 @@
   <ItemGroup>
     <PackageReference Include="DalamudPackager" Version="2.1.4" />
     <PackageReference Include="ILRepack" Version="2.0.18" />
-    <PackageReference Include="XivCommon" Version="3.2.0" />
+    <PackageReference Include="DalamudPackager" Version="2.1.5" />
+    <PackageReference Include="XivCommon" Version="4.0.0" />
   </ItemGroup>
 
   <!-- <Target Name="ILRepack" AfterTargets="Build">

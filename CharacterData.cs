@@ -15,6 +15,11 @@ namespace FFLogsViewer
             Fatebreaker = 75,
             EdensPromise = 76,
             OracleOfDarkness = 77,
+            Erichthonios = 78,
+            Hippokampos = 79,
+            Phoinix = 80,
+            Hesperos = 81,
+            HesperosII = 82,
             TheRubyWeaponI = 1051,
             TheRubyWeaponIi = 1052,
             VarisYaeGalvus = 1053,
@@ -25,9 +30,16 @@ namespace FFLogsViewer
             ShivaUnreal = 3001,
             TitanUnreal = 3002,
             LeviathanUnreal = 3003,
-            Tea = 1050,
-            UCoB = 1047,
-            UwU = 1048,
+            //EW Ultimates
+            Tea = 1062,
+            UCoB = 1060,
+            UwU = 1061,
+            // SHB Ultimates
+            TeaShB = 1050,
+            UCoBShB = 1047,
+            UwUShB = 1048,
+            Zodiark = 1058,
+            Hydaelyn = 1059,
         }
 
         internal enum DataType

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Numerics;
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Logging;
 using Dalamud.Plugin;
 using ImGuiNET;
@@ -10,9 +11,6 @@ namespace FFLogsViewer
 {
     internal class PluginUi : IDisposable
     {
-        private const float WindowHeight = 458;
-        private const float ReducedWindowHeight = 88;
-        private const float WindowWidth = 407;
         private readonly string[] _characterInput = new string[3];
         private readonly Vector4 _defaultColor = new(1.0f, 1.0f, 1.0f, 1.0f);
         private readonly Dictionary<string, Vector4> _jobColors = new();
@@ -26,7 +24,10 @@ namespace FFLogsViewer
         private bool _hasLoadingFailed;
 
         private bool _isLinkClicked;
+        private bool _isRaidButtonClicked;
+        private bool _isUltimateButtonClicked;
         private bool _isConfigClicked;
+        private bool _isSpoilerClicked;
         private float _jobsColumnWidth;
         private float _logsColumnWidth;
         private CharacterData _selectedCharacterData = new();
@@ -98,6 +99,14 @@ namespace FFLogsViewer
                 ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar |
                 ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoResize))
             {
+                var showSpoilers = this._plugin.Configuration.ShowSpoilers;
+                if (ImGui.Checkbox("Show spoilers##ShowSpoilers", ref showSpoilers))
+                {
+                    this._plugin.ToggleContextMenuButton(showSpoilers);
+                    this._plugin.Configuration.ShowSpoilers = showSpoilers;
+                    this._plugin.Configuration.Save();
+                }
+
                 var contextMenu = this._plugin.Configuration.ContextMenu;
                 if (ImGui.Checkbox("Search button in context menus##ContextMenu", ref contextMenu))
                 {
@@ -142,6 +151,13 @@ namespace FFLogsViewer
                     if (ImGui.IsItemHovered()) ImGui.SetTooltip("When the FF Logs Viewer window is open, opening a context menu" +
                                                                 "\nwill automatically search for the selected player." +
                                                                 "\nThis mode does not add a button to the context menu.");
+
+                    var hideInCombat = this._plugin.Configuration.HideInCombat;
+                    if (ImGui.Checkbox(@"Hide in combat##HideInCombat", ref hideInCombat))
+                    {
+                        this._plugin.Configuration.HideInCombat = hideInCombat;
+                        this._plugin.Configuration.Save();
+                    }
                 }
 
                 ImGui.Text("API client:");
@@ -214,7 +230,13 @@ namespace FFLogsViewer
 
         private void DrawMainWindow()
         {
-            if (!this.Visible) return;
+            if (!this.Visible
+                || (this._plugin.Configuration.HideInCombat && DalamudApi.Condition[ConditionFlag.InCombat]))
+                return;
+
+            var windowHeight = 287 * ImGui.GetIO().FontGlobalScale + 100;
+            var reducedWindowHeight = 58 * ImGui.GetIO().FontGlobalScale + 30;
+            var windowWidth = 407 * ImGui.GetIO().FontGlobalScale;
 
             var isCN = Utils4CN.Init.IsCN();
 
@@ -231,11 +253,18 @@ namespace FFLogsViewer
                         ImGui.CalcTextSize(this._selectedCharacterData.WorldName).X));
                 var idealWindowWidth = sizeMin * (isCN ? 2 : 3) + buttonsWidth + 73.0f;
                 if (idealWindowWidth < WindowWidth) idealWindowWidth = WindowWidth;
+                // var buttonsWidth = ((ImGui.CalcTextSize("Target") + ImGui.CalcTextSize("Clipboard")).X + (40.0f * ImGui.GetIO().FontGlobalScale));
+                // var sizeMin = Math.Max(ImGui.CalcTextSize(this._selectedCharacterData.FirstName).X,
+                //     Math.Max(ImGui.CalcTextSize(this._selectedCharacterData.LastName).X,
+                //         ImGui.CalcTextSize(this._selectedCharacterData.WorldName).X));
+                // var idealWindowWidth = sizeMin * 3 + buttonsWidth + 73.0f;
+                // if (idealWindowWidth < windowWidth) idealWindowWidth = windowWidth;
                 float idealWindowHeight;
                 if (this._selectedCharacterData.IsEveryLogsReady && !this._hasLoadingFailed)
-                    idealWindowHeight = WindowHeight;
+                    idealWindowHeight = windowHeight;
                 else
-                    idealWindowHeight = ReducedWindowHeight;
+                    idealWindowHeight = reducedWindowHeight;
+                var colWidth = ((idealWindowWidth - buttonsWidth) / 3.0f);
                 ImGui.SetWindowSize(new Vector2(idealWindowWidth, idealWindowHeight));
 
                 ImGui.SetColumnWidth(0, colWidth);
@@ -329,7 +358,7 @@ namespace FFLogsViewer
                 ImGui.SameLine();
                 if (!this._plugin.FfLogsClient.IsTokenValid)
                 {
-                    var message = !this._plugin.IsConfigSetup() ? "Config not setup, click to open settings." : "API client not valid, check config.";
+                    var message = !this._plugin.IsConfigSetup() ? "Config not setup, click to open settings." : "API client not valid, click to open settings.";
                     var messageSize = ImGui.CalcTextSize(message);
                     ImGui.SetCursorPosX(ImGui.GetWindowWidth() / 2 - messageSize.X / 2);
                     messageSize.X -= 7; // A bit too large on right side
@@ -355,8 +384,8 @@ namespace FFLogsViewer
                             var message = $"Viewing {this._selectedCharacterData.LoadedFirstName} {this._selectedCharacterData.LoadedLastName}@{this._selectedCharacterData.LoadedWorldName}'s logs.";
                             var messageSize = ImGui.CalcTextSize(message);
                             ImGui.SetCursorPosX(ImGui.GetWindowWidth() / 2 - messageSize.X / 2);
-                            messageSize.X -= 7; // A bit too large on right side
-                            messageSize.Y += 1;
+                            messageSize.X -= (7 * ImGui.GetIO().FontGlobalScale); // A bit too large on right side
+                            messageSize.Y += (1 * ImGui.GetIO().FontGlobalScale);
                             ImGui.Selectable(
                                 message,
                                 ref this._isLinkClicked, ImGuiSelectableFlags.None, messageSize);
@@ -435,131 +464,167 @@ namespace FFLogsViewer
                     ImGui.SetColumnWidth(3, this._logsColumnWidth);
                     ImGui.SetColumnWidth(4, this._jobsColumnWidth);
 
-                    PrintTextColumn(1, "Eden's Promise");
+                    var raidName = this._plugin.Configuration.DisplayOldRaid ? "Eden's Promise (?)" : "Asphodelos (?)";
+                    ImGui.SetCursorPosX(8.0f);
+                    ImGui.Selectable(
+                        raidName,
+                        ref this._isRaidButtonClicked, ImGuiSelectableFlags.None);
+                    if (ImGui.IsItemHovered()) ImGui.SetTooltip("Click to switch to " + (this._plugin.Configuration.DisplayOldRaid ? "Asphodelos." : "Eden's Promise."));
+
+                    if (this._isRaidButtonClicked)
+                    {
+                        this._plugin.Configuration.DisplayOldRaid = !this._plugin.Configuration.DisplayOldRaid;
+                        this._plugin.Configuration.Save();
+                        this._isRaidButtonClicked = false;
+                    }
+
                     ImGui.Spacing();
-                    PrintTextColumn(1, "Cloud of Darkness");
-                    PrintTextColumn(1, "Shadowkeeper");
-                    PrintTextColumn(1, "Fatebreaker");
-                    PrintTextColumn(1, "Eden's Promise");
-                    PrintTextColumn(1, "Oracle of Darkness");
+                    if (this._plugin.Configuration.DisplayOldRaid)
+                    {
+                        PrintTextColumn(1, "Cloud of Darkness");
+                        PrintTextColumn(1, "Shadowkeeper");
+                        PrintTextColumn(1, "Fatebreaker");
+                        PrintTextColumn(1, "Eden's Promise");
+                        PrintTextColumn(1, "Oracle of Darkness");
+                    }
+                    else
+                    {
+                        PrintTextColumn(1, "Erichthonios");
+                        PrintTextColumn(1, "Hippokampos");
+                        PrintTextColumn(1, "Phoinix");
+                        PrintTextColumn(1, "Hesperos");
+                        PrintTextColumn(1, "Hesperos II");
+                    }
                     ImGui.Spacing();
-                    PrintTextColumn(1, "Ultimates");
+                    var ultimateName = this._plugin.Configuration.DisplayOldUltimate ? "Ultimates (ShB) (?)" : "Ultimates (EW) (?)";
+                    ImGui.SetCursorPosX(8.0f);
+                    ImGui.Selectable(
+                        ultimateName,
+                        ref this._isUltimateButtonClicked, ImGuiSelectableFlags.None);
+                    if (ImGui.IsItemHovered()) ImGui.SetTooltip("Click to switch to " + (this._plugin.Configuration.DisplayOldUltimate ? "Endwalker ultimates." : "Shadowbringers ultimates."));
+
+                    if (this._isUltimateButtonClicked)
+                    {
+                        this._plugin.Configuration.DisplayOldUltimate = !this._plugin.Configuration.DisplayOldUltimate;
+                        this._plugin.Configuration.Save();
+                        this._isUltimateButtonClicked = false;
+                    }
                     ImGui.Spacing();
                     PrintTextColumn(1, "TEA");
-                    PrintTextColumn(1, "UwU");
                     PrintTextColumn(1, "UCoB");
+                    PrintTextColumn(1, "UwU");
                     ImGui.Spacing();
                     PrintTextColumn(1, "Trials (Extreme)");
                     ImGui.Spacing();
-                    PrintTextColumn(1, "The Emerald I");
-                    PrintTextColumn(1, "The Emerald II");
-                    PrintTextColumn(1, "The Diamond");
-                    ImGui.Spacing();
-                    PrintTextColumn(1, "Unreal");
-                    ImGui.Spacing();
-                    PrintTextColumn(1, "Leviathan");
+                    if (this._plugin.Configuration.ShowSpoilers)
+                    {
+                        PrintTextColumn(1, "Zodiark");
+                        PrintTextColumn(1, "Hydaelyn");
+                    }
+                    else
+                    {
+                        ImGui.SetCursorPosX(8.0f);
+                        ImGui.Selectable(
+                            "Trial 1 (?)",
+                            ref this._isSpoilerClicked, ImGuiSelectableFlags.None);
+                        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Big MSQ spoiler, click to display.");
+
+                        ImGui.SetCursorPosX(8.0f);
+                        ImGui.Selectable(
+                            "Trial 2 (?)",
+                            ref this._isSpoilerClicked, ImGuiSelectableFlags.None);
+                        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Big MSQ spoiler, click to display.");
+
+                        if (this._isSpoilerClicked)
+                        {
+                            this._plugin.Configuration.ShowSpoilers = !this._plugin.Configuration.ShowSpoilers;
+                            this._plugin.Configuration.Save();
+                            this._isSpoilerClicked = false;
+                        }
+
+                    }
 
                     try
                     {
                         ImGui.NextColumn();
                         PrintTextColumn(2, "Best");
                         ImGui.Spacing();
-                        PrintDataColumn(CharacterData.BossesId.CloudOfDarkness, CharacterData.DataType.Best, 2);
-                        PrintDataColumn(CharacterData.BossesId.Shadowkeeper, CharacterData.DataType.Best, 2);
-                        PrintDataColumn(CharacterData.BossesId.Fatebreaker, CharacterData.DataType.Best, 2);
-                        PrintDataColumn(CharacterData.BossesId.EdensPromise, CharacterData.DataType.Best, 2);
-                        PrintDataColumn(CharacterData.BossesId.OracleOfDarkness, CharacterData.DataType.Best, 2);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.CloudOfDarkness : CharacterData.BossesId.Erichthonios, CharacterData.DataType.Best, 2);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.Shadowkeeper : CharacterData.BossesId.Hippokampos, CharacterData.DataType.Best, 2);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.Fatebreaker : CharacterData.BossesId.Phoinix, CharacterData.DataType.Best, 2);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.EdensPromise : CharacterData.BossesId.Hesperos, CharacterData.DataType.Best, 2);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.OracleOfDarkness : CharacterData.BossesId.HesperosII, CharacterData.DataType.Best, 2);
                         ImGui.Spacing();
                         PrintTextColumn(2, "Best");
                         ImGui.Spacing();
-                        PrintDataColumn(CharacterData.BossesId.Tea, CharacterData.DataType.Best, 2);
-                        PrintDataColumn(CharacterData.BossesId.UwU, CharacterData.DataType.Best, 2);
-                        PrintDataColumn(CharacterData.BossesId.UCoB, CharacterData.DataType.Best, 2);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldUltimate ? CharacterData.BossesId.TeaShB : CharacterData.BossesId.Tea, CharacterData.DataType.Best, 2);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldUltimate ? CharacterData.BossesId.UCoBShB : CharacterData.BossesId.UCoB, CharacterData.DataType.Best, 2);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldUltimate ? CharacterData.BossesId.UwUShB : CharacterData.BossesId.UwU, CharacterData.DataType.Best, 2);
                         ImGui.Spacing();
                         PrintTextColumn(2, "Best");
                         ImGui.Spacing();
-                        PrintDataColumn(CharacterData.BossesId.TheEmeraldWeaponI, CharacterData.DataType.Best, 2);
-                        PrintDataColumn(CharacterData.BossesId.TheEmeraldWeaponIi, CharacterData.DataType.Best, 2);
-                        PrintDataColumn(CharacterData.BossesId.TheDiamondWeapon, CharacterData.DataType.Best, 2);
-                        ImGui.Spacing();
-                        PrintTextColumn(2, "Best");
-                        ImGui.Spacing();
-                        PrintDataColumn(CharacterData.BossesId.LeviathanUnreal, CharacterData.DataType.Best, 2);
+                        PrintDataColumn(CharacterData.BossesId.Zodiark, CharacterData.DataType.Best, 2);
+                        PrintDataColumn(CharacterData.BossesId.Hydaelyn, CharacterData.DataType.Best, 2);
 
                         ImGui.NextColumn();
                         PrintTextColumn(3, "Med.");
                         ImGui.Spacing();
-                        PrintDataColumn(CharacterData.BossesId.CloudOfDarkness, CharacterData.DataType.Median, 3);
-                        PrintDataColumn(CharacterData.BossesId.Shadowkeeper, CharacterData.DataType.Median, 3);
-                        PrintDataColumn(CharacterData.BossesId.Fatebreaker, CharacterData.DataType.Median, 3);
-                        PrintDataColumn(CharacterData.BossesId.EdensPromise, CharacterData.DataType.Median, 3);
-                        PrintDataColumn(CharacterData.BossesId.OracleOfDarkness, CharacterData.DataType.Median, 3);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.CloudOfDarkness : CharacterData.BossesId.Erichthonios, CharacterData.DataType.Median, 3);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.Shadowkeeper : CharacterData.BossesId.Hippokampos, CharacterData.DataType.Median, 3);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.Fatebreaker : CharacterData.BossesId.Phoinix, CharacterData.DataType.Median, 3);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.EdensPromise : CharacterData.BossesId.Hesperos, CharacterData.DataType.Median, 3);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.OracleOfDarkness : CharacterData.BossesId.HesperosII, CharacterData.DataType.Median, 3);
                         ImGui.Spacing();
                         PrintTextColumn(3, "Med.");
                         ImGui.Spacing();
-                        PrintDataColumn(CharacterData.BossesId.Tea, CharacterData.DataType.Median, 3);
-                        PrintDataColumn(CharacterData.BossesId.UwU, CharacterData.DataType.Median, 3);
-                        PrintDataColumn(CharacterData.BossesId.UCoB, CharacterData.DataType.Median, 3);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldUltimate ? CharacterData.BossesId.TeaShB : CharacterData.BossesId.Tea, CharacterData.DataType.Median, 3);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldUltimate ? CharacterData.BossesId.UCoBShB : CharacterData.BossesId.UCoB, CharacterData.DataType.Median, 3);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldUltimate ? CharacterData.BossesId.UwUShB : CharacterData.BossesId.UwU, CharacterData.DataType.Median, 3);
                         ImGui.Spacing();
                         PrintTextColumn(3, "Med.");
                         ImGui.Spacing();
-                        PrintDataColumn(CharacterData.BossesId.TheEmeraldWeaponI, CharacterData.DataType.Median, 3);
-                        PrintDataColumn(CharacterData.BossesId.TheEmeraldWeaponIi, CharacterData.DataType.Median, 3);
-                        PrintDataColumn(CharacterData.BossesId.TheDiamondWeapon, CharacterData.DataType.Median, 3);
-                        ImGui.Spacing();
-                        PrintTextColumn(3, "Med.");
-                        ImGui.Spacing();
-                        PrintDataColumn(CharacterData.BossesId.LeviathanUnreal, CharacterData.DataType.Median, 3);
+                        PrintDataColumn(CharacterData.BossesId.Zodiark, CharacterData.DataType.Median, 3);
+                        PrintDataColumn(CharacterData.BossesId.Hydaelyn, CharacterData.DataType.Median, 3);
 
                         ImGui.NextColumn();
                         PrintTextColumn(4, "Kills");
                         ImGui.Spacing();
-                        PrintDataColumn(CharacterData.BossesId.CloudOfDarkness, CharacterData.DataType.Kills, 4);
-                        PrintDataColumn(CharacterData.BossesId.Shadowkeeper, CharacterData.DataType.Kills, 4);
-                        PrintDataColumn(CharacterData.BossesId.Fatebreaker, CharacterData.DataType.Kills, 4);
-                        PrintDataColumn(CharacterData.BossesId.EdensPromise, CharacterData.DataType.Kills, 4);
-                        PrintDataColumn(CharacterData.BossesId.OracleOfDarkness, CharacterData.DataType.Kills, 4);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.CloudOfDarkness : CharacterData.BossesId.Erichthonios, CharacterData.DataType.Kills, 4);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.Shadowkeeper : CharacterData.BossesId.Hippokampos, CharacterData.DataType.Kills, 4);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.Fatebreaker : CharacterData.BossesId.Phoinix, CharacterData.DataType.Kills, 4);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.EdensPromise : CharacterData.BossesId.Hesperos, CharacterData.DataType.Kills, 4);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.OracleOfDarkness : CharacterData.BossesId.HesperosII, CharacterData.DataType.Kills, 4);
                         ImGui.Spacing();
                         PrintTextColumn(4, "Kills");
                         ImGui.Spacing();
-                        PrintDataColumn(CharacterData.BossesId.Tea, CharacterData.DataType.Kills, 4);
-                        PrintDataColumn(CharacterData.BossesId.UwU, CharacterData.DataType.Kills, 4);
-                        PrintDataColumn(CharacterData.BossesId.UCoB, CharacterData.DataType.Kills, 4);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldUltimate ? CharacterData.BossesId.TeaShB : CharacterData.BossesId.Tea, CharacterData.DataType.Kills, 4);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldUltimate ? CharacterData.BossesId.UCoBShB : CharacterData.BossesId.UCoB, CharacterData.DataType.Kills, 4);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldUltimate ? CharacterData.BossesId.UwUShB : CharacterData.BossesId.UwU, CharacterData.DataType.Kills, 4);
                         ImGui.Spacing();
                         PrintTextColumn(4, "Kills");
                         ImGui.Spacing();
-                        PrintDataColumn(CharacterData.BossesId.TheEmeraldWeaponI, CharacterData.DataType.Kills, 4);
-                        PrintDataColumn(CharacterData.BossesId.TheEmeraldWeaponIi, CharacterData.DataType.Kills, 4);
-                        PrintDataColumn(CharacterData.BossesId.TheDiamondWeapon, CharacterData.DataType.Kills, 4);
-                        ImGui.Spacing();
-                        PrintTextColumn(4, "Kills");
-                        ImGui.Spacing();
-                        PrintDataColumn(CharacterData.BossesId.LeviathanUnreal, CharacterData.DataType.Kills, 4);
+                        PrintDataColumn(CharacterData.BossesId.Zodiark, CharacterData.DataType.Kills, 4);
+                        PrintDataColumn(CharacterData.BossesId.Hydaelyn, CharacterData.DataType.Kills, 4);
 
                         ImGui.NextColumn();
                         PrintTextColumn(5, "Job");
                         ImGui.Separator();
-                        PrintDataColumn(CharacterData.BossesId.CloudOfDarkness, CharacterData.DataType.Job, 5);
-                        PrintDataColumn(CharacterData.BossesId.Shadowkeeper, CharacterData.DataType.Job, 5);
-                        PrintDataColumn(CharacterData.BossesId.Fatebreaker, CharacterData.DataType.Job, 5);
-                        PrintDataColumn(CharacterData.BossesId.EdensPromise, CharacterData.DataType.Job, 5);
-                        PrintDataColumn(CharacterData.BossesId.OracleOfDarkness, CharacterData.DataType.Job, 5);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.CloudOfDarkness : CharacterData.BossesId.Erichthonios, CharacterData.DataType.Job, 5);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.Shadowkeeper : CharacterData.BossesId.Hippokampos, CharacterData.DataType.Job, 5);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.Fatebreaker : CharacterData.BossesId.Phoinix, CharacterData.DataType.Job, 5);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.EdensPromise : CharacterData.BossesId.Hesperos, CharacterData.DataType.Job, 5);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldRaid ? CharacterData.BossesId.OracleOfDarkness : CharacterData.BossesId.HesperosII, CharacterData.DataType.Job, 5);
                         ImGui.Separator();
                         PrintTextColumn(5, "Job");
                         ImGui.Separator();
-                        PrintDataColumn(CharacterData.BossesId.Tea, CharacterData.DataType.Job, 5);
-                        PrintDataColumn(CharacterData.BossesId.UwU, CharacterData.DataType.Job, 5);
-                        PrintDataColumn(CharacterData.BossesId.UCoB, CharacterData.DataType.Job, 5);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldUltimate ? CharacterData.BossesId.TeaShB : CharacterData.BossesId.Tea, CharacterData.DataType.Job, 5);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldUltimate ? CharacterData.BossesId.UCoBShB : CharacterData.BossesId.UCoB, CharacterData.DataType.Job, 5);
+                        PrintDataColumn(this._plugin.Configuration.DisplayOldUltimate ? CharacterData.BossesId.UwUShB : CharacterData.BossesId.UwU, CharacterData.DataType.Job, 5);
                         ImGui.Separator();
                         PrintTextColumn(5, "Job");
                         ImGui.Separator();
-                        PrintDataColumn(CharacterData.BossesId.TheEmeraldWeaponI, CharacterData.DataType.Job, 5);
-                        PrintDataColumn(CharacterData.BossesId.TheEmeraldWeaponIi, CharacterData.DataType.Job, 5);
-                        PrintDataColumn(CharacterData.BossesId.TheDiamondWeapon, CharacterData.DataType.Job, 5);
-                        ImGui.Separator();
-                        PrintTextColumn(5, "Job");
-                        ImGui.Separator();
-                        PrintDataColumn(CharacterData.BossesId.LeviathanUnreal, CharacterData.DataType.Job, 5);
+                        PrintDataColumn(CharacterData.BossesId.Zodiark, CharacterData.DataType.Job, 5);
+                        PrintDataColumn(CharacterData.BossesId.Hydaelyn, CharacterData.DataType.Job, 5);
 
                         ImGui.Columns();
                     }
@@ -577,41 +642,63 @@ namespace FFLogsViewer
 
         private void PrintDataColumn(CharacterData.BossesId bossId, CharacterData.DataType dataType, int column)
         {
-            string text;
+            string text = null;
             var color = new Vector4(1.0f, 1.0f, 1.0f, 1.0f);
             int log;
             switch (dataType)
             {
                 case CharacterData.DataType.Best:
-                    if (!this._selectedCharacterData.Bests.TryGetValue((int) bossId, out log))
-                        throw new ArgumentNullException($"Best log not found for boss ({bossId}).");
-                    text = log == 0 ? "-" : log.ToString();
-                    color = GetLogColor(log);
+                    if (this._selectedCharacterData.Bests.TryGetValue((int)bossId, out log))
+                    {
+                        text = log == -1 ? "-" : log.ToString();
+                        color = GetLogColor(log);
+                    }
+
                     break;
 
                 case CharacterData.DataType.Median:
-                    if (!this._selectedCharacterData.Medians.TryGetValue((int) bossId, out log))
-                        throw new ArgumentNullException($"Median log not found for boss ({bossId}).");
-                    text = log == 0 ? "-" : log.ToString();
-                    color = GetLogColor(log);
+                    if (this._selectedCharacterData.Medians.TryGetValue((int)bossId, out log))
+                    {
+                        text = log == -1 ? "-" : log.ToString();
+                        color = GetLogColor(log);
+                    }
+
                     break;
+
                 case CharacterData.DataType.Kills:
-                    if (!this._selectedCharacterData.Kills.TryGetValue((int) bossId, out log))
-                        throw new ArgumentNullException($"Median log not found for boss ({bossId}).");
-                    text = log == 0 ? "-" : log.ToString();
+                    if (this._selectedCharacterData.Kills.TryGetValue((int)bossId, out log))
+                    {
+                        text = log == -1 ? "-" : log.ToString();
+                    }
+
                     break;
+
                 case CharacterData.DataType.Job:
-                    if (!this._selectedCharacterData.Jobs.TryGetValue((int) bossId, out var job))
-                        throw new ArgumentNullException($"Job not found for boss ({bossId}).");
-                    if (!this._jobColors.TryGetValue(job, out color)) color = this._jobColors["Default"];
-                    text = job;
+                    if (this._selectedCharacterData.Jobs.TryGetValue((int)bossId, out var job))
+                    {
+                        text = job;
+                        if (!this._jobColors.TryGetValue(job, out color))
+                        {
+                            color = this._jobColors["Default"];
+                        }
+                    }
+
                     break;
+
                 default:
                     throw new ArgumentOutOfRangeException(nameof(dataType), dataType, null);
             }
 
+            if (text != null)
+            {
+                PrintTextColumn(column, text, color);
+            }
+            else
+            {
+                PrintTextColumn(column, "N/A", color);
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Data not available. This is expected if the boss is not yet on FF Logs.");
+            }
 
-            PrintTextColumn(column, text, color);
         }
 
         private void PrintTextColumn(int column, string text, Vector4 color)
@@ -639,7 +726,7 @@ namespace FFLogsViewer
         {
             return log switch
             {
-                0 => this._logColors["Default"],
+                < 0 => this._logColors["Default"],
                 < 25 => this._logColors["Grey"],
                 < 50 => this._logColors["Green"],
                 < 75 => this._logColors["Blue"],

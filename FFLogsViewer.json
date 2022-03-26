@@ -6,9 +6,13 @@
   "RepoUrl": "https://github.com/AsterOcclu/FFLogsViewer",
   "IconUrl": "https://github.com/Aireil/FFLogsViewer/raw/master/res/icon.png",
    "ImageUrls": [
-    "https://github.com/Aireil/FFLogsViewer/raw/master/res/ui.png",
-    "https://github.com/Aireil/FFLogsViewer/raw/master/res/contextMenu1.png",
-	"https://github.com/Aireil/FFLogsViewer/raw/master/res/contextMenu2.png"
+    "https://github.com/Aireil/FFLogsViewer/raw/master/res/banner.png"
   ],
-  "Changelog": "New Dalamud version update."
+  "Tags": [
+    "FFLogs",
+    "FFLog",
+    "FFLo",
+    "FFL"
+  ],
+  "Changelog": "Add ability to change between ShB and EW ultimates (by Variosss)"
 }

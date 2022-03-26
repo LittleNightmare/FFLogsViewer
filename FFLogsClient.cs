@@ -88,10 +88,18 @@ namespace FFLogsViewer
             var name = $"{characterData.FirstName} {characterData.LastName}".TrimEnd();
             var query =
                 $"{{\"query\":\"query {{characterData{{character(name: \\\"{name}\\\"serverSlug: \\\"{characterData.WorldName}\\\"serverRegion: \\\"{characterData.RegionName}\\\"){{" +
-                "hidden " + "EdenPromise: zoneRankings(zoneID: 38, , difficulty: 101)" +
-                "EdenVerse: zoneRankings(zoneID: 33, , difficulty: 101)" + "ExtremesII: zoneRankings(zoneID: 34)" +
-                "ExtremesIII: zoneRankings(zoneID: 37)" + "Unreal: zoneRankings(zoneID: 36)" +
-                "UltimatesShB: zoneRankings(zoneID: 32)" + "UltimatesSB: zoneRankings(zoneID: 30)" + "}}}\"}";
+                "hidden " +
+                "EdenPromise: zoneRankings(zoneID: 38, , difficulty: 101)" +
+                //"EdenVerse: zoneRankings(zoneID: 33, , difficulty: 101)" +
+                "Asphodelos: zoneRankings(zoneID: 44, difficulty: 101)" +
+                //"ExtremesII: zoneRankings(zoneID: 34)" +
+                //"ExtremesIII: zoneRankings(zoneID: 37)" +
+                "ExtremesEW: zoneRankings(zoneID: 42)" +
+                //"Unreal: zoneRankings(zoneID: 36)" +
+                "UltimatesShB: zoneRankings(zoneID: 32)" +
+                "UltimatesSB: zoneRankings(zoneID: 30)" +
+                "Ultimates: zoneRankings(zoneID: 43)" +
+                "}}}\"}";
 
             var content = new StringContent(query, Encoding.UTF8, "application/json");
 
