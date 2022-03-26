@@ -31,6 +31,7 @@ namespace FFLogsViewer
             "晨曦王座", "沃仙曦染", "宇宙和音", "红玉海", "萌芽池", "神意之地", "幻影群岛", "拉诺西亚",
             "拂晓之间", "龙巢神殿", "旅人栈桥", "白金幻象", "梦羽宝境", "神拳痕", "潮风亭", "白银乡",
             "琥珀原", "柔风海湾", "海猫茶屋", "延夏", "静语庄园", "摩杜纳", "紫水栈桥",
+            "水晶塔", "银泪湖", "太阳海岸", "伊修加德", "红茶川"
         };
 
         internal readonly Configuration Configuration;
@@ -421,6 +422,7 @@ namespace FFLogsViewer
                     x => x.Name.ToString().Equals(worldName, StringComparison.InvariantCultureIgnoreCase));
 
             if (world == null)  throw new ArgumentException("Invalid world.");
+
             // 国服这边数据有问题
             if (_cn.Any(worldName.Contains)) return "CN";
 
