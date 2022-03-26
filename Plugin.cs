@@ -26,7 +26,7 @@ namespace FFLogsViewer
 
         private readonly string[] _validWorlds;
 
-        private readonly string[] _cn =
+        static private readonly string[] _cn =
         {
             "晨曦王座", "沃仙曦染", "宇宙和音", "红玉海", "萌芽池", "神意之地", "幻影群岛", "拉诺西亚",
             "拂晓之间", "龙巢神殿", "旅人栈桥", "白金幻象", "梦羽宝境", "神拳痕", "潮风亭", "白银乡",
@@ -421,19 +421,10 @@ namespace FFLogsViewer
                     x => x.Name.ToString().Equals(worldName, StringComparison.InvariantCultureIgnoreCase));
 
             if (world == null)  throw new ArgumentException("Invalid world.");
-
-            if (this._cn.Any(worldName.Contains)) return "CN";
+            // 国服这边数据有问题
+            if (_cn.Any(worldName.Contains)) return "CN";
 
             throw new ArgumentException("World not supported.");
-            // TODO 检查CN的数字
-            return world?.DataCenter?.Value?.Region switch
-            {
-                1 => "JP",
-                2 => "NA",
-                3 => "EU",
-                4 => "OC",
-                _ => throw new ArgumentException("World not supported."),
-            };
         }
 
         private static void ParseLogs(CharacterData characterData, dynamic zone)

@@ -240,19 +240,19 @@ namespace FFLogsViewer
 
             var isCN = Utils4CN.Init.IsCN();
 
-            ImGui.SetNextWindowSize(new Vector2(WindowWidth, ReducedWindowHeight), ImGuiCond.FirstUseEver);
+            ImGui.SetNextWindowSize(new Vector2(windowWidth, reducedWindowHeight), ImGuiCond.FirstUseEver);
             if (ImGui.Begin("FF Logs Viewer", ref this._visible,
                 ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoScrollWithMouse))
             {
                 ImGui.Columns(4, "InputColumns", true);
 
                 var buttonsWidth = (ImGui.CalcTextSize("Target") + ImGui.CalcTextSize("Clipboard")).X + 47.0f;
-                var colWidth = (ImGui.GetWindowWidth() - buttonsWidth) / (isCN ? 2.0f : 3.0f);
+                
                 var sizeMin = Math.Max(ImGui.CalcTextSize(this._selectedCharacterData.FirstName).X,
                     Math.Max(ImGui.CalcTextSize(this._selectedCharacterData.LastName).X,
                         ImGui.CalcTextSize(this._selectedCharacterData.WorldName).X));
                 var idealWindowWidth = sizeMin * (isCN ? 2 : 3) + buttonsWidth + 73.0f;
-                if (idealWindowWidth < WindowWidth) idealWindowWidth = WindowWidth;
+                if (idealWindowWidth < windowWidth) idealWindowWidth = windowWidth;
                 // var buttonsWidth = ((ImGui.CalcTextSize("Target") + ImGui.CalcTextSize("Clipboard")).X + (40.0f * ImGui.GetIO().FontGlobalScale));
                 // var sizeMin = Math.Max(ImGui.CalcTextSize(this._selectedCharacterData.FirstName).X,
                 //     Math.Max(ImGui.CalcTextSize(this._selectedCharacterData.LastName).X,
@@ -264,7 +264,7 @@ namespace FFLogsViewer
                     idealWindowHeight = windowHeight;
                 else
                     idealWindowHeight = reducedWindowHeight;
-                var colWidth = ((idealWindowWidth - buttonsWidth) / 3.0f);
+                var colWidth = (ImGui.GetWindowWidth() - buttonsWidth) / (isCN ? 2.0f : 3.0f);
                 ImGui.SetWindowSize(new Vector2(idealWindowWidth, idealWindowHeight));
 
                 ImGui.SetColumnWidth(0, colWidth);
