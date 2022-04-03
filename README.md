@@ -1,6 +1,6 @@
 # Update:
 
-Add support to Chinese DC.
+Add support to Chinese DC 6.0.
 
 
 # FFLogsViewer

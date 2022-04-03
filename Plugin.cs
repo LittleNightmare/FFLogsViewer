@@ -175,7 +175,7 @@ namespace FFLogsViewer
                 var character = ParseTextForChar(args);
                 Process.Start(new ProcessStartInfo()
                 {
-                    FileName = $"https://www.fflogs.com/character/{GetRegionName(character.WorldName)}/{character.WorldName}/{character.FirstName} {character.LastName}",
+                    FileName = $"https://cn.fflogs.com/character/{GetRegionName(character.WorldName)}/{character.WorldName}/{character.FirstName} {character.LastName}",
                     UseShellExecute = true,
                 });
 
